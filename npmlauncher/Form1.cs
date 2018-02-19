@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -39,7 +39,11 @@ namespace npmlauncher {
 
     private void listBox1_DoubleClick(object sender, EventArgs e) {
       var selected = (ScriptEntry)listBox1.SelectedItem;
-      Process.Start("cmd", "/c npm run " + selected.Name);
+      var command = "npm run " + selected.Name;
+      if (!Directory.Exists("node_modules")) {
+        command = "npm install && " + command;
+      }
+      Process.Start("cmd", "/c \"" + command + "\"");
       Exit();
     }
 
