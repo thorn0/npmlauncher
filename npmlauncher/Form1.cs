@@ -17,12 +17,7 @@ namespace npmlauncher {
     }
 
     private void Populate() {
-      var serializer = new JavaScriptSerializer();
-      string fileName = "package.json";
-      if (!File.Exists(fileName)) Exit();
-      var pkg = serializer.DeserializeObject(File.ReadAllText(fileName)) as IDictionary<string, object>;
-      if (pkg == null || !pkg.ContainsKey("scripts")) Exit();
-      var scripts = pkg["scripts"] as IDictionary<string, object>;
+      GetScripts(out IDictionary<string, object> scripts, out string name);
       if (scripts == null) Exit();
       listBox1.DataSource = (
         from entry in scripts
@@ -30,18 +25,30 @@ namespace npmlauncher {
         where !string.IsNullOrWhiteSpace(command)
         select new ScriptEntry(entry.Key, command)
       ).ToList();
-      string name = pkg.ContainsKey("name") ? pkg["name"] as string : null;
+      Text = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(Directory.GetCurrentDirectory()) : name;
+    }
+
+    private void GetScripts(out IDictionary<string, object> scripts, out string name) {
+      scripts = null;
+      name = null;
+      const string fileName = "package.json";
+      if (!File.Exists(fileName)) return;
+      var serializer = new JavaScriptSerializer();
+      var pkg = serializer.DeserializeObject(File.ReadAllText(fileName)) as IDictionary<string, object>;
+      if (pkg == null || !pkg.ContainsKey("scripts")) return;
+      scripts = pkg["scripts"] as IDictionary<string, object>;
+      name = pkg.ContainsKey("name") ? pkg["name"] as string : null;
       if (pkg.ContainsKey("version") && !string.IsNullOrWhiteSpace(pkg["version"] as string)) {
         name = (string.IsNullOrWhiteSpace(name) ? "" : name + " ") + "v" + pkg["version"];
       }
-      Text = (string.IsNullOrWhiteSpace(name) ? "" : name + ": ") + "npm run …";
     }
 
     private void listBox1_DoubleClick(object sender, EventArgs e) {
+      string executable = File.Exists("yarn.lock") ? "yarn" : "npm";
       var selected = (ScriptEntry)listBox1.SelectedItem;
-      var command = "npm run " + selected.Name;
+      var command = executable + " run " + selected.Name;
       if (!Directory.Exists("node_modules")) {
-        command = "npm install && " + command;
+        command = executable + " install && " + command;
       }
       Process.Start("cmd", "/c \"" + command + "\"");
       Exit();
