@@ -24,12 +24,24 @@ namespace npmlauncher {
     private void Populate() {
       GetScripts(out IDictionary<string, object> scripts, out string name);
       if (scripts == null) Exit();
-      listBox1.DataSource = (
+
+      var entries = (
         from entry in scripts
         let command = entry.Value as string
         where !string.IsNullOrWhiteSpace(command)
-        select new ScriptEntry(entry.Key, command)
+        select new { Name = entry.Key, Command = command }
       ).ToList();
+
+      int maxNameLength = entries.Select(e => e.Name.Length).Max();
+
+      listBox1.DataSource = entries.Select(
+        e => new ScriptEntry {
+          Name = e.Name,
+          Command = e.Command,
+          Text = e.Name.PadRight(maxNameLength + 2) + e.Command
+        }
+      ).ToList();
+
       Text = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(Directory.GetCurrentDirectory()) : name;
     }
 
@@ -38,8 +50,7 @@ namespace npmlauncher {
       name = null;
       const string fileName = "package.json";
       if (!File.Exists(fileName)) return;
-      var serializer = new JavaScriptSerializer();
-      var pkg = serializer.DeserializeObject(File.ReadAllText(fileName)) as IDictionary<string, object>;
+      var pkg = ParseJson(fileName);
       if (pkg == null || !pkg.ContainsKey("scripts")) return;
       scripts = pkg["scripts"] as IDictionary<string, object>;
       name = pkg.ContainsKey("name") ? pkg["name"] as string : null;
@@ -55,7 +66,25 @@ namespace npmlauncher {
       if (!Directory.Exists("node_modules")) {
         command = executable + " install && " + command;
       }
-      var p = Process.Start("cmd", "/c \"" + command + "\"");
+
+      bool useWsl = false;
+      const string yarnIntegrityFileName = "node_modules\\.yarn-integrity";
+      if (executable == "yarn" && File.Exists(yarnIntegrityFileName)) {
+        var integrity = ParseJson(yarnIntegrityFileName);
+        if (integrity.ContainsKey("systemParams") && Convert.ToString(integrity["systemParams"]).Contains("linux")) {
+          useWsl = true;
+        }
+      }
+
+      if (ModifierKeys.HasFlag(Keys.Control)) {
+        command += useWsl ? "; read -p 'Press any key to continue . . .'" : " && pause";
+      }
+
+      // https://github.com/microsoft/vscode/issues/63156#issuecomment-484260724
+      var p = useWsl
+        ? Process.Start("bash", "-i -c \"bash -i -c '" + command.Replace("'", @"'\''") + "'\"")
+        : Process.Start("cmd", "/c \"" + command + "\"");
+
       SpinWait.SpinUntil(() => p.MainWindowHandle != IntPtr.Zero);
       SetWindowText(p.MainWindowHandle, Text + ": " + selected.Name);
       Exit();
@@ -78,6 +107,12 @@ namespace npmlauncher {
           Exit();
           break;
       }
+    }
+
+    private IDictionary<string, object> ParseJson(string fileName) {
+      var serializer = new JavaScriptSerializer();
+      string content = File.ReadAllText(fileName);
+      return serializer.DeserializeObject(content) as IDictionary<string, object>;
     }
   }
 }
