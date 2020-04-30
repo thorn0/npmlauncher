@@ -5,11 +5,16 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 namespace npmlauncher {
   public partial class Form1 : Form {
+    [DllImport("user32.dll")]
+    static extern int SetWindowText(IntPtr hWnd, string text);
+
     public Form1() {
       InitializeComponent();
       Icon = Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location);
@@ -50,7 +55,9 @@ namespace npmlauncher {
       if (!Directory.Exists("node_modules")) {
         command = executable + " install && " + command;
       }
-      Process.Start("cmd", "/c \"" + command + "\"");
+      var p = Process.Start("cmd", "/c \"" + command + "\"");
+      SpinWait.SpinUntil(() => p.MainWindowHandle != IntPtr.Zero);
+      SetWindowText(p.MainWindowHandle, Text + ": " + selected.Name);
       Exit();
     }
 
